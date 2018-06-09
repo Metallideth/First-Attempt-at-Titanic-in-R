@@ -39,3 +39,12 @@ ggplot(data = train, aes(x = Title, y = Survived)) + geom_bar(
 
 #Some of these could certainly be combined - try Mrs and Miss,
 #Master and Major, Dr and Col
+
+Mrs <- filter(train, Title %in% c("Mrs"))
+Miss <- filter(train, Title %in% c("Miss"))
+counts <- c(dim(filter(Mrs))[1],dim(filter(Miss))[1])
+lived <- c(dim(filter(Mrs,Survived == 1))[1],dim(filter(Miss,Survived == 1))[1])
+
+prop.test(lived,counts,correct = FALSE)$p.value #No need for continuity correction
+
+#
