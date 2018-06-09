@@ -189,9 +189,20 @@ grid.arrange(ideal,less,more, nrow = 1)
 Not very normal, which makes sense considering p-value of `r shapiroresults[maxindex]`. We'll make do with leaving age untransformed.
 
 ```{r}
+AgeNA <- filter(train, is.na(Age))
+AgeNotNA <- filter(train, !is.na(Age))
+counts4 <- c(dim(filter(AgeNA))[1],dim(filter(AgeNotNA))[1])
+lived4 <- c(dim(filter(AgeNA,Survived == 1))[1],dim(filter(AgeNotNA,Survived == 1))[1])
+
+prop.test(lived4,counts4)
 
 ```
 
+It looks like on a raw basis the ratios are different. It's hard to tell if this means that we can't impute Age, considering other variables might be different. We could investigate this using pairwise analysis but let's go ahead and impute the values with the MICE package.
+
+```{r}
+
+```
 
 
 ```{r ggpairs again}
