@@ -107,4 +107,26 @@ None of the rest of the "Title" values have a sufficient number of values to run
 Gentlelady <- the Countess, Ms, Mrs, Mme, Mlle, Lady
 Miss
 Gentleman <- Sir, Master, Major, Dr, Col
-Man <- Rev, Mr, Jonkheer, Don, Capt
+Mr <- Rev, Mr, Jonkheer, Don, Capt
+
+In the test set, we'll go with
+
+Gentlelady <- Ms, Mrs
+Miss <- Dona, Miss
+Gentleman <- Master, Dr, Col
+Mr <- Mr, Rev
+
+```{r grouping Titles}
+train <- train %>% 
+  mutate(Title = replace(Title, Title %in% c("the Countess", "Ms", "Mrs", "Mme", "Mlle", "Lady"),"Gentlelady")) %>% 
+  mutate(Title = replace(Title, Title %in% c("Sir", "Master", "Major", "Dr", "Col"),"Gentleman")) %>% 
+  mutate(Title = replace(Title, Title %in% c("Rev", "Mr", "Jonkheer", "Don", "Capt"),"Mr"))
+  
+test <- test %>% 
+  mutate(Title = replace(Title, Title %in% c("Ms", "Mrs"),"Gentlelady")) %>% 
+  mutate(Title = replace(Title, Title %in% c("Dona", "Miss"),"Miss")) %>% 
+  mutate(Title = replace(Title, Title %in% c("Master", "Dr", "Col"),"Gentleman")) %>% 
+  mutate(Title = replace(Title, Title %in% c("Mr", "Rev"),"Mr"))
+
+```
+
