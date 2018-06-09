@@ -10,6 +10,8 @@ library(tidyverse)
 library(stringr)
 library(ggplot2)
 library(GGally)
+library(gridExtra)
+library(reshape2)
 
 train <- read.csv("train.csv")
 test <-  read.csv("test.csv")
@@ -124,9 +126,85 @@ prop.test(lived,counts)$p.value
 
 P-value is lower than before, indicating that the probabilities of survival for these groups is even more divergent.
 
-```{r ggpairs again}
-train <- select(train, - Name)
-ggpairs(data = train)
+Now we need to fill in Age. First, I'll look at the distribution of age and see if the NAs appear to be drawn from the same population using inferential statistics.
+
+```{r complete Age field}
+summary(train)
+summary(test)
+
+unadjAge <- ggplot(data = subset(train,!is.na(Age)), aes(x = Age)) + geom_histogram(binwidth = 2)
 
 ```
+
+Age is skewed right, so we should probably transform it to be normal so it has better regression properties.
+
+```{r Age field transformed}
+logAge <- ggplot(data = subset(train,!is.na(Age)), aes(x = log(Age))) + geom_histogram(binwidth = 1/10)
+sqrtAge <- ggplot(data = subset(train,!is.na(Age)), aes(x = sqrt(Age))) + geom_histogram(binwidth = 1/5)
+otherpowerAge <- ggplot(data = subset(train,!is.na(Age)), aes(x = Age^0.2)) + geom_histogram(binwidth = 1/20)
+
+grid.arrange(unadjAge,logAge,sqrtAge,otherpowerAge,nrow = 1)
+```
+
+There's still a great deal of skew to square root. As shown below, a slightly higher power is warranted
+
+```{r Age frequency polygon}
+trainagesubset <- subset(train,!is.na(Age))
+numpowers <- length(seq(0.1,1,by=0.1))
+exponent <- rep(seq(0.1,1,by=0.1),each = dim(trainagesubset)[1])
+agerep <- rep(trainagesubset$Age,times = numpowers)
+transformage <- data.frame(exponent = as.factor(exponent),transage = agerep^exponent)
+
+ggplot(data = transformage, aes(x = transage)) + geom_freqpoly(aes(color = exponent),bins = 100) +
+  coord_cartesian(xlim = c(0,40))
+
+ggplot(data = transformage, aes(x = transage)) + geom_histogram(aes(fill = exponent,color = exponent),bins = 100) + coord_cartesian(xlim = c(0,40))
+
+#ggplot(data = transformage, aes(x = transage)) + geom_area(aes(y = ..count..,fill = exponent), stat = "bin", color = "black", alpha = 0.3, bins = 50)
+```
+
+The best exponent appears to be somewhere close to 0.7. To get more specific, let's run a Shapiro-Wilk test on a range of values close by.
+
+```{r}
+params <- rep(seq(0.6,0.9,by=0.01),each = dim(trainagesubset)[1])
+params <- data.frame(matrix(params,nrow = dim(trainagesubset)[1]))
+shapiroparams <- trainagesubset$Age ^ params
+shapiroresults <- apply(shapiroparams,2,function(x) shapiro.test(x)$p.value)
+maxindex <- which.max(shapiroresults)
+exponent <- seq(0.6,0.9,by=0.01)[maxindex]
+
+exponent
+```
+
+Looks like an exponent of `r exponent` is returned. Let's check and see what that looks like.
+
+```{r}
+ideal <- ggplot(data = train,aes(x = Age ^ exponent)) + geom_histogram()
+less <- ggplot(data = train,aes(x = Age ^ 0.5)) + geom_histogram()
+more <- ggplot(data = train,aes(x = Age)) + geom_histogram()
+
+grid.arrange(ideal,less,more, nrow = 1)
+```
+
+Not very normal, which makes sense considering p-value of `r shapiroresults[maxindex]`. We'll make do with leaving age untransformed.
+
+```{r}
+
+```
+
+
+
+```{r ggpairs again}
+trainmod <- train
+trainmod$Survived <- as.factor(trainmod$Survived)
+trainmod$Pclass <- as.factor(trainmod$Pclass)
+trainmod <- select(trainmod,-Name)
+ggpairs(data = trainmod,upper = list(continuous = "cor",discrete = "facetbar",combo = "box_no_facet"),lower = 
+          list(combo = "facethist",discrete = "facetbar",continuous = "points"),axisLabels = "internal")
+
+```
+
+From this, I can see a lot. Survival is much lower among Pclass 3, and slightly higher in Pclass 1. The age of those who survived skews younger. Males died with very high frequency, and females had a higher frequency of survival. SibSp doesn't seem to have a dramatic effect, whereas Parch does. Fare skews higher among the survivors, and embarkation port appears to significantly affect survival.
+
+However, it is clear upon further reflection that a lot of these independent variables are correlated. Considering the small dataset and number of features, I think it's unlikely that there will be overfitting here, but it's something to look out for during cross-validation.
 
