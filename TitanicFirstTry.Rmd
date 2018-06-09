@@ -1,6 +1,8 @@
 ---
 title: "TitanicFirstTry"
 output: html_document
+editor_options: 
+  chunk_output_type: console
 ---
 
 ```{r setup, include=FALSE}
@@ -72,23 +74,37 @@ Title is significant, clearly
 
 ```{r plot Title}
 ggplot(data = train, aes(x = Title, y = Survived)) + geom_bar(
-    stat = "summary", fun.y = mean) + 
-    coord_cartesian(ylim = c(0,1.2)) + 
+    stat = "summary", fun.y = mean) + coord_flip() +
     geom_text(aes(label = ..count.., y= ..prop..), 
-    stat= "count", vjust = -1)
+    stat= "count", hjust = 1, col = "blue")
 ```
 
-Some of these could certainly be combined - try Mrs and Miss
+Some of these could certainly be combined - try Mrs and Miss, Mr and Master
 
-```{r proportion test Mrs. and Miss}
+```{r proportion tests}
 
 Mrs <- filter(train, Title %in% c("Mrs"))
 Miss <- filter(train, Title %in% c("Miss"))
 counts <- c(dim(filter(Mrs))[1],dim(filter(Miss))[1])
 lived <- c(dim(filter(Mrs,Survived == 1))[1],dim(filter(Miss,Survived == 1))[1])
 
+Mr <- filter(train, Title %in% c("Mr"))
+Master <- filter(train, Title %in% c("Master"))
+counts2 <- c(dim(filter(Mr))[1],dim(filter(Master))[1])
+lived2 <- c(dim(filter(Mr,Survived == 1))[1],dim(filter(Master,Survived == 1))[1])
+
 prop.test(lived,counts,correct = FALSE)$p.value
+prop.test(lived2,counts2,correct = FALSE)$p.value
 
 ```
 
-At 95% significance we would not reject the null hypothesis that these means are the same
+I'll assume a strict(er) standard here, 90% significance.
+
+At 90% significance we would reject both null hypotheses that these means are the same, so we should not merge them.
+
+None of the rest of the "Title" values have a sufficient number of values to run statistical tests. Thus, title will merge the following:
+
+Gentlelady <- the Countess, Ms, Mrs, Mme, Mlle, Lady
+Miss
+Gentleman <- Sir, Master, Major, Dr, Col
+Man <- Rev, Mr, Jonkheer, Don, Capt
