@@ -5,30 +5,6 @@ editor_options:
   chunk_output_type: console
 ---
 
-```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
-```
-
-## R Markdown
-
-This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
-
-When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
-
-```{r cars}
-summary(cars)
-```
-
-## Including Plots
-
-You can also embed plots, for example:
-
-```{r pressure, echo=FALSE}
-plot(pressure)
-```
-
-Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
-
 ```{r load libraries and data}
 library(tidyverse)
 library(stringr)
@@ -93,8 +69,8 @@ Master <- filter(train, Title %in% c("Master"))
 counts2 <- c(dim(filter(Mr))[1],dim(filter(Master))[1])
 lived2 <- c(dim(filter(Mr,Survived == 1))[1],dim(filter(Master,Survived == 1))[1])
 
-prop.test(lived,counts,correct = FALSE)$p.value
-prop.test(lived2,counts2,correct = FALSE)$p.value
+prop.test(lived,counts)$p.value
+prop.test(lived2,counts2)$p.value
 
 ```
 
@@ -127,6 +103,30 @@ test <- test %>%
   mutate(Title = replace(Title, Title %in% c("Dona", "Miss"),"Miss")) %>% 
   mutate(Title = replace(Title, Title %in% c("Master", "Dr", "Col"),"Gentleman")) %>% 
   mutate(Title = replace(Title, Title %in% c("Mr", "Rev"),"Mr"))
+
+ggplot(data = train, aes(x = Title, y = Survived)) + geom_bar(
+    stat = "summary", fun.y = mean) + coord_flip() +
+    geom_text(aes(label = ..count.., y= ..prop..), 
+    stat= "count", hjust = 1, col = "blue")
+
+```
+
+That's more like it. Let's check Miss vs. Gentlelady just to be sure...
+
+```{r Miss vs. Gentlelady}
+Gentlelady <- filter(train, Title %in% c("Gentlelady"))
+Miss <- filter(train, Title %in% c("Miss"))
+counts <- c(dim(filter(Gentlelady))[1],dim(filter(Miss))[1])
+lived <- c(dim(filter(Gentlelady,Survived == 1))[1],dim(filter(Miss,Survived == 1))[1])
+
+prop.test(lived,counts)$p.value
+```
+
+P-value is lower than before, indicating that the probabilities of survival for these groups is even more divergent.
+
+```{r ggpairs again}
+train <- select(train, - Name)
+ggpairs(data = train)
 
 ```
 
