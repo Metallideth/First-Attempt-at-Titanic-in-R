@@ -12,6 +12,7 @@ library(ggplot2)
 library(GGally)
 library(gridExtra)
 library(reshape2)
+library(lazyeval)
 
 train <- read.csv("train.csv")
 test <-  read.csv("test.csv")
@@ -198,18 +199,14 @@ prop.test(lived4,counts4)
 
 ```
 
-It looks like on a raw basis the ratios are different. It's hard to tell if this means that we can't impute Age, considering other variables might be different. We could investigate this using pairwise analysis but let's go ahead and impute the values with the MICE package.
-
-```{r}
-
-```
-
+It looks like on a raw basis the ratios are different. It's hard to tell if this means that we can't impute Age, considering other variables might be different. We should go ahead and investigate this using pairwise analysis. We'll use the ggpairs visualization tool and explore relationships that appear significant.
 
 ```{r ggpairs again}
 trainmod <- train
 trainmod$Survived <- as.factor(trainmod$Survived)
 trainmod$Pclass <- as.factor(trainmod$Pclass)
 trainmod <- select(trainmod,-Name)
+
 ggpairs(data = trainmod,upper = list(continuous = "cor",discrete = "facetbar",combo = "box_no_facet"),lower = 
           list(combo = "facethist",discrete = "facetbar",continuous = "points"),axisLabels = "internal")
 
@@ -217,5 +214,47 @@ ggpairs(data = trainmod,upper = list(continuous = "cor",discrete = "facetbar",co
 
 From this, I can see a lot. Survival is much lower among Pclass 3, and slightly higher in Pclass 1. The age of those who survived skews younger. Males died with very high frequency, and females had a higher frequency of survival. SibSp doesn't seem to have a dramatic effect, whereas Parch does. Fare skews higher among the survivors, and embarkation port appears to significantly affect survival.
 
-However, it is clear upon further reflection that a lot of these independent variables are correlated. Considering the small dataset and number of features, I think it's unlikely that there will be overfitting here, but it's something to look out for during cross-validation.
+It is clear upon further reflection that a lot of these independent variables are correlated. Considering the small dataset and number of features, I think it's unlikely that there will be overfitting here, but it's something to look out for during cross-validation.
+
+Specifically for Age, I'm going to do some investigations of flagging those that are coming through as NA and those that arent as separate. I'll investigate the effect other variables have on the survival probabilities of the Age = NA folks, to see if Survival is still significantly even after accounting for various interactions.
+
+```{r}
+train <- mutate(train,ageIsNA = is.na(Age))
+trainmod <- train
+trainmod <- select(trainmod,-c(Name,Age))
+
+{
+# summarizer <- function(data, varinquestion, facetvar,dfname,viqval,fvval) {
+#     require("dplyr")
+#     require("lazyeval")
+#     filter_criteria1 <- interp(~data$y == x & data$z == t, .values=list(y = as.name(facetvar), x = fvval, z = as.name(varinquestion), t = viqval,data = as.name(dfname)))
+#     filter_criteria2 <- interp(~data$y == x, .values=list(y = as.name(varinquestion),x=viqval,data = as.name(dfname)))
+#     varinquestion <- as.name(varinquestion)
+#     facetvar <- as.name(facetvar)
+#     resultset1 <- data %>% 
+#       filter_(filter_criteria1) %>% 
+#       summarize(count1 = n())
+#     resultset2 <- data %>% 
+#       filter_(filter_criteria2) %>% 
+#       summarize(count2 = n())
+#     return(resultset1$count1/resultset2$count2)
+# }
+# 
+# tablemaker <- function(data, varinquestion, facetvar) {
+#   result <- data %>% group_by_(as.name(varinquestion),as.name(facetvar)) %>% summarize_(result = summarizer(data,varinquestion,facetvar,deparse(substitute(data)),as.name(varinquestion),as.name(facetvar)))
+#   return(result)
+# }
+}
+
+Pcvagedata <- trainmod %>% group_by(ageIsNA, Pclass) %>% summarize(Proportion = sum(trainmod$ageIsNA == ageIsNA & trainmod$Pclass == Pclass)/sum(trainmod$ageIsNA == ageIsNA), Count = n())
+
+Pcvage <- ggplot(data = Pcvagedata, aes(x = Pclass, y = Proportion,fill = ageIsNA)) + geom_col(position = "dodge") + geom_text(aes(label = Count), 
+     vjust = -0.2, col = "blue",position = position_dodge(width = 0.9)) + coord_cartesian(ylim = c(0,1))
+
+Sexvagedata <- trainmod %>% group_by(ageIsNA, Sex) %>% summarize(Proportion = sum(trainmod$ageIsNA == ageIsNA & trainmod$Sex == Sex)/sum(trainmod$ageIsNA == ageIsNA), Count = n())
+
+Sexvage <- ggplot(data = Sexvagedata, aes(x = Sex, y = Proportion,fill = ageIsNA)) + geom_col(position = "dodge") + geom_text(aes(label = Count), 
+     vjust = -0.2, col = "blue",position = position_dodge(width = 0.9)) + coord_cartesian(ylim = c(0,1))
+
+```
 
