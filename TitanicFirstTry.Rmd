@@ -72,9 +72,10 @@ Title is significant, clearly
 
 ```{r plot Title}
 ggplot(data = train, aes(x = Title, y = Survived)) + geom_bar(
-    stat = "summary", fun.y = mean) + coord_flip() +
+    stat = "summary", fun.y = mean) + 
+    coord_cartesian(ylim = c(0,1.2)) + 
     geom_text(aes(label = ..count.., y= ..prop..), 
-    stat= "count", hjust = -0.5)
+    stat= "count", vjust = -1)
 ```
 
 Some of these could certainly be combined - try Mrs and Miss
@@ -90,3 +91,4 @@ prop.test(lived,counts,correct = FALSE)$p.value
 
 ```
 
+At 95% significance we would not reject the null hypothesis that these means are the same
