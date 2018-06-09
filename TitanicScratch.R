@@ -35,16 +35,18 @@ summary(with(train, aov(Survived ~ Title)))
 #Title is significant, clearly
 
 ggplot(data = train, aes(x = Title, y = Survived)) + geom_bar(
-    stat = "summary", fun.y = mean) + coord_flip()
+    stat = "summary", fun.y = mean) + coord_flip() +
+    geom_text(aes(label = ..count.., y= ..prop..), 
+    stat= "count", hjust = -0.5)
 
-#Some of these could certainly be combined - try Mrs and Miss,
-#Master and Major, Dr and Col
+
+#Some of these could certainly be combined - try Mrs and Miss
 
 Mrs <- filter(train, Title %in% c("Mrs"))
 Miss <- filter(train, Title %in% c("Miss"))
 counts <- c(dim(filter(Mrs))[1],dim(filter(Miss))[1])
 lived <- c(dim(filter(Mrs,Survived == 1))[1],dim(filter(Miss,Survived == 1))[1])
 
-prop.test(lived,counts,correct = FALSE)$p.value #No need for continuity correction
+prop.test(lived,counts,correct = FALSE)$p.value
 
 #

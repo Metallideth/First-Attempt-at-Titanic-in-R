@@ -1,0 +1,92 @@
+---
+title: "TitanicFirstTry"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+```{r cars}
+summary(cars)
+```
+
+## Including Plots
+
+You can also embed plots, for example:
+
+```{r pressure, echo=FALSE}
+plot(pressure)
+```
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
+
+```{r load libraries and data}
+library(tidyverse)
+library(stringr)
+library(ggplot2)
+library(GGally)
+
+train <- read.csv("train.csv")
+test <-  read.csv("test.csv")
+train <- as_tibble(train)
+test <- as_tibble(test)
+
+summary(train)
+```
+
+Age appears to have NA's
+
+Let's add a feature for title
+
+```{r add Title}
+train <- mutate(train, Title = 
+                  gsub("^.*, (.*?)\\..*$", "\\1",as.character(Name)))
+test <- mutate(test, Title = 
+                 gsub("^.*, (.*?)\\..*$", "\\1",as.character(Name)))
+train <- select(train, -c(PassengerId,Cabin,Ticket))
+test <- select(test, -c(PassengerId,Cabin,Ticket))
+train[train$Embarked =="",]$Embarked <- "S" #assign the mode
+```
+
+We'll fix the ages later
+In the meantime, let's see how certain variables affect survival
+
+```{r first ggpairs}
+ggpairs(data = select(train,-Name))
+```
+
+Too many levels in Title.
+
+```{r}
+summary(with(train, aov(Survived ~ Title)))
+```
+
+Title is significant, clearly
+
+```{r plot Title}
+ggplot(data = train, aes(x = Title, y = Survived)) + geom_bar(
+    stat = "summary", fun.y = mean) + coord_flip() +
+    geom_text(aes(label = ..count.., y= ..prop..), 
+    stat= "count", hjust = -0.5)
+```
+
+Some of these could certainly be combined - try Mrs and Miss
+
+```{r proportion test Mrs. and Miss}
+
+Mrs <- filter(train, Title %in% c("Mrs"))
+Miss <- filter(train, Title %in% c("Miss"))
+counts <- c(dim(filter(Mrs))[1],dim(filter(Miss))[1])
+lived <- c(dim(filter(Mrs,Survived == 1))[1],dim(filter(Miss,Survived == 1))[1])
+
+prop.test(lived,counts,correct = FALSE)$p.value
+
+```
+
