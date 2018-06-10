@@ -13,6 +13,8 @@ library(GGally)
 library(gridExtra)
 library(reshape2)
 library(lazyeval)
+library(mice)
+library(VIM)
 
 train <- read.csv("train.csv")
 test <-  read.csv("test.csv")
@@ -33,7 +35,8 @@ test <- mutate(test, Title =
                  gsub("^.*, (.*?)\\..*$", "\\1",as.character(Name)))
 train <- select(train, -c(PassengerId,Cabin,Ticket))
 test <- select(test, -c(PassengerId,Cabin,Ticket))
-train[train$Embarked =="",]$Embarked <- "S" #assign the mode
+levels(train$Embarked)[levels(train$Embarked) == ""] <- "S" #assign the mode
+test[is.na(test$Fare),]$Fare = mean(test[!is.na(test$Fare),]$Fare) #assign the mean
 ```
 
 We'll fix the ages later
@@ -257,4 +260,139 @@ Sexvage <- ggplot(data = Sexvagedata, aes(x = Sex, y = Proportion,fill = ageIsNA
      vjust = -0.2, col = "blue",position = position_dodge(width = 0.9)) + coord_cartesian(ylim = c(0,1))
 
 ```
+
+At this rate, why not just do the chi squared goodness of fit test to determine if the ageIsNA grouping results in statistically significant groupings of the rest of the elements.
+
+We'll look into the categorical variables first. That includes Pclass, Sex, Embarked, and Title.
+
+```{r}
+categoricalsummary <- trainmod %>% group_by(ageIsNA,Pclass,Sex,Embarked,Title) %>% 
+  summarize(Count = n())
+
+sexexplore <- categoricalsummary %>% group_by(ageIsNA,Sex) %>% 
+  summarize(Count = sum(Count))
+
+expectedprop <- filter(sexexplore,ageIsNA == FALSE) %>% ungroup() %>%
+  select(Count)
+observed <- filter(sexexplore,ageIsNA == TRUE) %>% ungroup() %>%
+  select(Count)
+expected <- as.matrix(expectedprop/sum(expectedprop))
+observed <- as.matrix(observed)
+
+chisq.test(x = observed,p = expected)
+
+```
+
+At a 95% standard, we accept the hypothesis that the Sex of the ageIsNA and the non-NA groups is distributed equally. Thus, I can use Sex to fill out Age whilst introducing minimal bias into the sample.
+
+```{r}
+Pclassexplore <- categoricalsummary %>% group_by(ageIsNA,Pclass) %>% 
+  summarize(Count = sum(Count))
+
+expectedprop <- filter(Pclassexplore,ageIsNA == FALSE) %>% ungroup() %>%
+  select(Count)
+observed <- filter(Pclassexplore,ageIsNA == TRUE) %>% ungroup() %>%
+  select(Count)
+expected <- as.matrix(expectedprop/sum(expectedprop))
+observed <- as.matrix(observed)
+
+chisq.test(x = observed,p = expected)
+```
+
+Not so much the case for Pclass. Thus, I'll avoid using this variable to impute Age.
+
+```{r}
+Embarkedexplore <- categoricalsummary %>% group_by(ageIsNA,Embarked) %>% 
+  summarize(Count = sum(Count))
+
+expectedprop <- filter(Embarkedexplore,ageIsNA == FALSE) %>% ungroup() %>%
+  select(Count)
+observed <- filter(Embarkedexplore,ageIsNA == TRUE) %>% ungroup() %>%
+  select(Count)
+expected <- as.matrix(expectedprop/sum(expectedprop))
+observed <- as.matrix(observed)
+
+chisq.test(x = observed,p = expected)
+
+Titleexplore <- categoricalsummary %>% group_by(ageIsNA,Title) %>% 
+  summarize(Count = sum(Count))
+
+expectedprop <- filter(Titleexplore,ageIsNA == FALSE) %>% ungroup() %>%
+  select(Count)
+observed <- filter(Titleexplore,ageIsNA == TRUE) %>% ungroup() %>%
+  select(Count)
+expected <- as.matrix(expectedprop/sum(expectedprop))
+observed <- as.matrix(observed)
+
+chisq.test(x = observed,p = expected)
+```
+
+Embarked and Title are also determined to be significantly different. Among the categorical variables, only Sex can be used as a valid imputation factor for Age.
+
+Due to the sparse nature of the data SibSp and Parch, I'll convert these into looking at values of 0 or all else, and treat them as a categorical variable.
+
+```{r}
+trainmod <- mutate(trainmod, Siblingless = SibSp == 0,
+                   Parentless = Parch == 0)
+
+categoricalsummary <- trainmod %>% group_by(ageIsNA,Siblingless,Parentless) %>% 
+  summarize(Count = n())
+
+Parchexplore <- categoricalsummary %>% group_by(ageIsNA,Parentless) %>% 
+  summarize(Count = sum(Count))
+
+expectedprop <- filter(Parchexplore,ageIsNA == FALSE) %>% ungroup() %>%
+  select(Count)
+observed <- filter(Parchexplore,ageIsNA == TRUE) %>% ungroup() %>%
+  select(Count)
+expected <- as.matrix(expectedprop/sum(expectedprop))
+observed <- as.matrix(observed)
+
+chisq.test(x = observed,p = expected)
+
+SibSpexplore <- categoricalsummary %>% group_by(ageIsNA,Siblingless) %>% 
+  summarize(Count = sum(Count))
+
+expectedprop <- filter(SibSpexplore,ageIsNA == FALSE) %>% ungroup() %>%
+  select(Count)
+observed <- filter(SibSpexplore,ageIsNA == TRUE) %>% ungroup() %>%
+  select(Count)
+expected <- as.matrix(expectedprop/sum(expectedprop))
+observed <- as.matrix(observed)
+
+chisq.test(x = observed,p = expected)
+
+```
+
+Looks like those are significantly different as well. The last remaining variable is Fare.
+
+```{r}
+ggplot(data = trainmod, aes(x = Fare)) + geom_density(aes(fill = ageIsNA),alpha = 0.3)
+```
+These density graphs look very similar
+
+```{r}
+ggplot(data = trainmod, aes(x = Fare)) + geom_histogram(aes(fill = ageIsNA)) + facet_wrap(~ageIsNA,nrow = 2,scales = "free")
+
+filter(trainmod,ageIsNA == TRUE)$Fare %>% summary()
+filter(trainmod,ageIsNA == FALSE)$Fare %>% summary()
+```
+
+However upon looking closer at the statistics it appears that these are in fact distributed very differently, with vastly different means and medians. They are so different that a statistical test isn't really needed here. At long last, we can impute the Age values solely based on Sex.
+
+```{r}
+set.seed(2000)
+trainmod <- select(train,c(Sex,Age))
+impute1 <- mice(trainmod, m =5)
+impute2 <- complete(impute1)
+train <- mutate(train,imputeAge = impute2$Age)
+
+testmod <- select(test, c(Sex,Age))
+impute1 <- mice(testmod, m = 5)
+impute2 <- complete(impute1)
+test <- mutate(test,imputeAge = impute2$Age)
+```
+
+Now we're ready to start breaking down features. I am planning to use some combination of Pclass, Sex, SibSp, Parch, Fare, Embarked, Title, and imputeAge to model this. I'll leave age and fare continuous for now. Split the training set up into a training and cross validation set.
+
 
