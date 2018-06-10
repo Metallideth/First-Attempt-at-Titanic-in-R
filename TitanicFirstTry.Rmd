@@ -15,6 +15,9 @@ library(reshape2)
 library(lazyeval)
 library(mice)
 library(VIM)
+library(caret)
+library(e1071)
+library(glmnet)
 
 train <- read.csv("train.csv")
 test <-  read.csv("test.csv")
@@ -407,9 +410,83 @@ training <- train[-cvindex,]
 formula <- as.formula("Survived ~ Pclass + Sex + SibSp + Parch + Fare + Embarked + Title + imputeAge")
 logisticreg <- glm(formula, family = binomial(link = "logit"),data = training)
 
-sum(ifelse(predict(logisticreg,select(training,-Survived),type="response")>0.5,1,0) == training$Survived)/dim(training)[1]
+summary(logisticreg)
 
-sum(ifelse(predict(logisticreg,select(cv,-Survived),type="response")>0.5,1,0) == cv$Survived)/dim(cv)[1]
+trainingpredictions <- ifelse(predict(logisticreg,select(training,-Survived),type="response")>0.5,1,0)
+testpredictions <- ifelse(predict(logisticreg,select(cv,-Survived),type="response")>0.5,1,0)
+
+sum(trainingpredictions == training$Survived)/dim(training)[1]
+
+sum(testpredictions == cv$Survived)/dim(cv)[1]
+
+confusionMatrix(factor(testpredictions),factor(cv$Survived))
 
 ```
 
+76.5% accuracy on the validation set. Let's plot learning curves to see if we're overfitting; a lot of variables are coming through as not significant
+
+```{r}
+learnmax <- dim(training)[1]
+learnmat <- matrix(rep(1:learnmax,learnmax),nrow=learnmax,byrow = TRUE)
+learnmat[upper.tri(learnmat)]=0
+trainerror = c()
+cverror = c()
+
+for (i in 10:learnmax) {
+  logisticreg <- glm(formula, family = binomial(link = "logit"),data = training[learnmat[i,],])
+  trainingpredictions <- ifelse(predict(logisticreg,select(training,-Survived),type="response")>0.5,1,0)
+testpredictions <- ifelse(predict(logisticreg,select(cv,-Survived),type="response")>0.5,1,0)
+  trainerror <- c(trainerror,sum(trainingpredictions != training$Survived)/dim(training)[1])
+
+  cverror <- c(cverror,sum(testpredictions != cv$Survived)/dim(cv)[1])
+}
+
+index <- 10:learnmax
+learningcurve <- cbind(index,trainerror,cverror)
+learningcurve <- as.data.frame(learningcurve)
+learningcurve <- melt(learningcurve, id = "index")
+
+ggplot(data = learningcurve) + geom_line(aes(y = value,x = index,color = variable))
+
+```
+
+The fact that error widens in the extremes of the graph is evidence of overfitting, which makes sense considering what I saw in the summary.
+
+We can try with regularization.
+
+```{r}
+expandeddata <- model.matrix(formula,training)
+expandedcv <- model.matrix(formula,cv)
+logisticregml <- glmnet(expandeddata,training$Survived,family = "binomial")
+cvpredicted <- ifelse(predict(logisticregml,expandedcv,type = "response")>0.5,1,0)
+lambdaarray <- apply(cvpredicted,2,function(x) sum(x == cv$Survived)/length(x))
+lind <- which.max(lambdaarray)
+lambda <- logisticregml$lambda[lind]
+logisticregml <- glmnet(expandeddata,training$Survived,family = "binomial",lambda = lambda)
+testpredictionsml <- ifelse(predict(logisticregml,expandedcv,type = "response")>0.5,1,0)
+
+
+glmnetconf <- confusionMatrix(factor(testpredictionsml),factor(cv$Survived))
+acc <- glmnetconf$overall[1]
+
+```
+
+Improved it a little bit but could only get an accuracy of `r acc` which isn't that much higher than before. That'll be the threshold for our other methods.
+
+Let's try naive bayes.
+
+```{r}
+trainingmod <- training
+trainingmod$Survived <- factor(trainingmod$Survived)
+trainingmod$Title <- factor(trainingmod$Title)
+naivebayesmodel <- naiveBayes(formula,trainingmod)
+cv$Survived <- factor(cv$Survived)
+cv$Title <- factor(cv$Title)
+naivepred <- predict(naivebayesmodel,cv)
+naiveconf <- confusionMatrix(naivepred,cv$Survived)
+naiveacc <- naiveconf$overall[1]
+```
+
+Pretty similar to logistic regression. Accuracy is `r naiveacc`, so the regularized logistic regression is slightly better.
+
+Willing to also try decision tree, SVM, kNN, random forest,
