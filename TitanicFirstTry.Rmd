@@ -395,4 +395,21 @@ test <- mutate(test,imputeAge = impute2$Age)
 
 Now we're ready to start breaking down features. I am planning to use some combination of Pclass, Sex, SibSp, Parch, Fare, Embarked, Title, and imputeAge to model this. I'll leave age and fare continuous for now. Split the training set up into a training and cross validation set.
 
+```{r}
+train$Pclass <- factor(train$Pclass)
+test$Pclass <- factor(test$Pclass)
+train <- select(train,-c(Name,Age,ageIsNA))
+test <- select(test, -c(Name,Age))
+datasize <- dim(train)[1]
+cvindex <- sample(1:datasize,200, replace = FALSE)
+cv <- train[cvindex,]
+training <- train[-cvindex,]
+formula <- as.formula("Survived ~ Pclass + Sex + SibSp + Parch + Fare + Embarked + Title + imputeAge")
+logisticreg <- glm(formula, family = binomial(link = "logit"),data = training)
+
+sum(ifelse(predict(logisticreg,select(training,-Survived),type="response")>0.5,1,0) == training$Survived)/dim(training)[1]
+
+sum(ifelse(predict(logisticreg,select(cv,-Survived),type="response")>0.5,1,0) == cv$Survived)/dim(cv)[1]
+
+```
 
