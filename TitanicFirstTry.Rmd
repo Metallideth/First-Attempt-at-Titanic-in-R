@@ -37,7 +37,7 @@ train <- mutate(train, Title =
 test <- mutate(test, Title = 
                  gsub("^.*, (.*?)\\..*$", "\\1",as.character(Name)))
 train <- select(train, -c(PassengerId,Cabin,Ticket))
-test <- select(test, -c(PassengerId,Cabin,Ticket))
+test <- select(test, -c(Cabin,Ticket))
 levels(train$Embarked)[levels(train$Embarked) == ""] <- "S" #assign the mode
 test[is.na(test$Fare),]$Fare = mean(test[!is.na(test$Fare),]$Fare) #assign the mean
 ```
@@ -489,4 +489,44 @@ naiveacc <- naiveconf$overall[1]
 
 Pretty similar to logistic regression. Accuracy is `r naiveacc`, so the regularized logistic regression is slightly better.
 
-Willing to also try decision tree, SVM, kNN, random forest,
+Willing to also try decision tree, SVM, kNN, random forest, and gradient boosting algorithms.
+
+```{r}
+
+scaledtrain <- training
+scaledtrain$Survived <- factor(scaledtrain$Survived)
+
+scaledtrain$imputeAge <- (scaledtrain$imputeAge - 
+  min(scaledtrain$imputeAge))/diff(range(scaledtrain$imputeAge))
+scaledtrain$Fare <- (scaledtrain$Fare - 
+  min(scaledtrain$Fare))/diff(range(scaledtrain$Fare))
+
+svmmodel <- svm(data = scaledtrain, formula, kernel = "linear", method = "C-classification")
+
+scaledcv <- cv
+scaledcv$Survived <- factor(scaledcv$Survived)
+
+scaledcv$imputeAge <- (scaledcv$imputeAge - 
+  min(scaledcv$imputeAge))/diff(range(scaledcv$imputeAge))
+scaledcv$Fare <- (scaledcv$Fare - 
+  min(scaledcv$Fare))/diff(range(scaledcv$Fare))
+
+svmpred <-  predict(svmmodel, scaledcv, type = "response")
+svmconf <- confusionMatrix(svmpred,cv$Survived)
+
+```
+
+Let's go ahead and go with regularized logistic regression. We'll fit to all of the training data and then run the model on the test data to see what we get.
+
+```{r}
+expandeddata <- model.matrix(formula,train)
+logisticregml <- glmnet(expandeddata,train$Survived,family = "binomial",lambda = lambda)
+test$Title <- factor(test$Title)
+testformula <- as.formula(paste("~ ",as.character(formula)[3]))
+expandedtest <- model.matrix(testformula,test)
+testpredictions <- ifelse(predict(logisticregml,expandedtest,type = "response")>0.5,1,0)
+submission <- with(test,cbind(PassengerId,Survived = testpredictions))
+
+write.csv(submission, file = "gender_submission.csv")
+```
+
