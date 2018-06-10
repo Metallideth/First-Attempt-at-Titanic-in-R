@@ -38,18 +38,14 @@ test <- mutate(test, Title =
                  gsub("^.*, (.*?)\\..*$", "\\1",as.character(Name)))
 train <- select(train, -c(PassengerId,Cabin,Ticket))
 test <- select(test, -c(Cabin,Ticket))
+
 levels(train$Embarked)[levels(train$Embarked) == ""] <- "S" #assign the mode
+
 test[is.na(test$Fare),]$Fare = mean(test[!is.na(test$Fare),]$Fare) #assign the mean
 ```
 
 We'll fix the ages later
-In the meantime, let's see how certain variables affect survival
-
-```{r first ggpairs}
-ggpairs(data = select(train,-Name))
-```
-
-Too many levels in Title.
+In the meantime, let's see how certain variables affect survival, but there are too many levels in Title. We'll reduce that a little.
 
 ```{r}
 summary(with(train, aov(Survived ~ Title)))
@@ -229,28 +225,6 @@ train <- mutate(train,ageIsNA = is.na(Age))
 trainmod <- train
 trainmod <- select(trainmod,-c(Name,Age))
 
-{
-# summarizer <- function(data, varinquestion, facetvar,dfname,viqval,fvval) {
-#     require("dplyr")
-#     require("lazyeval")
-#     filter_criteria1 <- interp(~data$y == x & data$z == t, .values=list(y = as.name(facetvar), x = fvval, z = as.name(varinquestion), t = viqval,data = as.name(dfname)))
-#     filter_criteria2 <- interp(~data$y == x, .values=list(y = as.name(varinquestion),x=viqval,data = as.name(dfname)))
-#     varinquestion <- as.name(varinquestion)
-#     facetvar <- as.name(facetvar)
-#     resultset1 <- data %>% 
-#       filter_(filter_criteria1) %>% 
-#       summarize(count1 = n())
-#     resultset2 <- data %>% 
-#       filter_(filter_criteria2) %>% 
-#       summarize(count2 = n())
-#     return(resultset1$count1/resultset2$count2)
-# }
-# 
-# tablemaker <- function(data, varinquestion, facetvar) {
-#   result <- data %>% group_by_(as.name(varinquestion),as.name(facetvar)) %>% summarize_(result = summarizer(data,varinquestion,facetvar,deparse(substitute(data)),as.name(varinquestion),as.name(facetvar)))
-#   return(result)
-# }
-}
 
 Pcvagedata <- trainmod %>% group_by(ageIsNA, Pclass) %>% summarize(Proportion = sum(trainmod$ageIsNA == ageIsNA & trainmod$Pclass == Pclass)/sum(trainmod$ageIsNA == ageIsNA), Count = n())
 
@@ -489,7 +463,7 @@ naiveacc <- naiveconf$overall[1]
 
 Pretty similar to logistic regression. Accuracy is `r naiveacc`, so the regularized logistic regression is slightly better.
 
-Willing to also try decision tree, SVM, kNN, random forest, and gradient boosting algorithms.
+I'll see if SVM provides a better result, if not I'll just go with regularized logistic.
 
 ```{r}
 
@@ -514,6 +488,8 @@ scaledcv$Fare <- (scaledcv$Fare -
 svmpred <-  predict(svmmodel, scaledcv, type = "response")
 svmconf <- confusionMatrix(svmpred,cv$Survived)
 
+svmconf
+
 ```
 
 Let's go ahead and go with regularized logistic regression. We'll fit to all of the training data and then run the model on the test data to see what we get.
@@ -527,6 +503,6 @@ expandedtest <- model.matrix(testformula,test)
 testpredictions <- ifelse(predict(logisticregml,expandedtest,type = "response")>0.5,1,0)
 submission <- with(test,cbind(PassengerId,Survived = testpredictions))
 
-write.csv(submission, file = "gender_submission.csv")
+write.csv(submission, file = "gender_submission.csv",row.names = FALSE)
 ```
 
